@@ -7,10 +7,15 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
+import com.google.firebase.remoteconfig.FirebaseRemoteConfig;
+import com.sentiance.sdk.InitState;
 import com.sentiance.sdk.OnInitCallback;
 import com.sentiance.sdk.OnStartFinishedHandler;
 import com.sentiance.sdk.SdkConfig;
@@ -33,13 +38,41 @@ public class MyApplication extends Application implements OnInitCallback, OnStar
     }
 
     private void initializeSentianceSdk () {
-        // Create the config.
-        SdkConfig config = new SdkConfig.Builder(SENTIANCE_APP_ID, SENTIANCE_SECRET, createNotification())
-                .setOnSdkStatusUpdateHandler(new SdkStatusUpdateHandler(getApplicationContext()))
-                .build();
+        final FirebaseRemoteConfig firebaseRemoteConfig = FirebaseRemoteConfig.getInstance();
 
-        // Initialize the Sentiance SDK.
-        Sentiance.getInstance(this).init(config, this);
+        // Create the config.
+        final SdkConfig config = new SdkConfig.Builder(SENTIANCE_APP_ID, SENTIANCE_SECRET, createNotification()).build();
+
+        // Synchronously check if Sentiance is enabled. Initially this value may be false,
+        // but will be updated with your remote config value during the next startup.
+        //
+        // It is important to note that, by default, we don't initialize the Sentiance SDK in
+        // the completion handler of the Firebase fetch() call. This is because the SDK must be
+        // initialized before onCreate() returns. Since the completion handler is asynchronous,
+        // we cannot guarantee the desired order of execution.
+        if (firebaseRemoteConfig.getBoolean("sentiance_enabled")) {
+            // Initialize the Sentiance SDK.
+            Sentiance.getInstance(this).init(config, this);
+        }
+
+        Task<Boolean> task = firebaseRemoteConfig.fetchAndActivate();
+        task.addOnCompleteListener(new OnCompleteListener<Boolean>() {
+            @Override
+            public void onComplete (@NonNull Task<Boolean> task) {
+                Context cxt = MyApplication.this;
+                if (!firebaseRemoteConfig.getBoolean("sentiance_enabled"))
+                    return;
+
+                // After a remote config update, initialize the Sentiance SDK if
+                // it has not been initialized yet.
+                // Initializing here should only be done if the SDK was disable, but has been
+                // enabled after a remote config update. Initializing only here (i.e. without
+                // the above synchronous code) will otherwise result in missed SDK detections.
+                if (Sentiance.getInstance(cxt).getInitState() == InitState.NOT_INITIALIZED) {
+                    Sentiance.getInstance(cxt).init(config, MyApplication.this);
+                }
+            }
+        });
     }
 
     @Override
