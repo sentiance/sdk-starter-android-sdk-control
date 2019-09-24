@@ -7,16 +7,19 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.app.NotificationCompat;
 import android.util.Log;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.app.NotificationCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig;
 import com.sentiance.sdk.InitState;
 import com.sentiance.sdk.OnInitCallback;
+import com.sentiance.sdk.OnSdkStatusUpdateHandler;
 import com.sentiance.sdk.OnStartFinishedHandler;
 import com.sentiance.sdk.SdkConfig;
 import com.sentiance.sdk.SdkStatus;
@@ -24,7 +27,9 @@ import com.sentiance.sdk.Sentiance;
 import com.sentiance.sdk.Token;
 import com.sentiance.sdk.TokenResultCallback;
 
-public class MyApplication extends Application implements OnInitCallback, OnStartFinishedHandler {
+public class MyApplication extends Application implements OnInitCallback, OnStartFinishedHandler, OnSdkStatusUpdateHandler {
+
+    public static final String ACTION_SENTIANCE_STATUS_UPDATE = "com.sentiance.sdkstarter.action.STATUS_UPDATE";
 
     private static final String SENTIANCE_APP_ID = "YOUR_APP_ID";
     private static final String SENTIANCE_SECRET = "YOUR_APP_SECRET";
@@ -41,7 +46,9 @@ public class MyApplication extends Application implements OnInitCallback, OnStar
         final FirebaseRemoteConfig firebaseRemoteConfig = FirebaseRemoteConfig.getInstance();
 
         // Create the config.
-        final SdkConfig config = new SdkConfig.Builder(SENTIANCE_APP_ID, SENTIANCE_SECRET, createNotification()).build();
+        final SdkConfig config = new SdkConfig.Builder(SENTIANCE_APP_ID, SENTIANCE_SECRET,
+                createNotification())
+                .setOnSdkStatusUpdateHandler(this).build();
 
         // Synchronously check if Sentiance is enabled. Initially this value may be false,
         // but will be updated with your remote config value during the next startup.
@@ -150,5 +157,10 @@ public class MyApplication extends Application implements OnInitCallback, OnStar
                 Log.e(TAG, "Couldn't get access token");
             }
         });
+    }
+
+    @Override
+    public void onSdkStatusUpdate (SdkStatus status) {
+        LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent(ACTION_SENTIANCE_STATUS_UPDATE));
     }
 }
